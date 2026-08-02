@@ -21,19 +21,21 @@ from urllib.parse import urlencode
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
 
-# Both are read from environment variables set in Railway's "Variables" tab.
-# الجديد (مع إضافة strip لتنظيف الرموز المخفية):
-BOT_TOKEN = (os.environ.get("BOT_TOKEN") or "").strip()
+# Clean environment variables thoroughly to prevent HTTPX InvalidURL error (\n or spaces)
+raw_bot_token = os.environ.get("BOT_TOKEN", "")
+BOT_TOKEN = "".join(raw_bot_token.split())  # Removes all whitespace, newline (\n), and carriage returns (\r)
+
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN environment variable is not set!")
 
-MINI_APP_URL = (os.environ.get("MINI_APP_URL") or "").strip()
+raw_mini_app_url = os.environ.get("MINI_APP_URL", "")
+MINI_APP_URL = raw_mini_app_url.strip()
+
 if not MINI_APP_URL:
     raise RuntimeError("MINI_APP_URL environment variable is not set!")
 
 # Ensure base URL has no trailing slash
 BASE_WEBAPP_URL = MINI_APP_URL.rstrip('/')
-
 
 logging.basicConfig(level=logging.INFO)
 
