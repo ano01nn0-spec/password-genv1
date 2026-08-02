@@ -16,7 +16,6 @@ SETUP:
 
 import os
 import re
-import time
 import logging
 from urllib.parse import urlencode
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -30,6 +29,9 @@ if not BOT_TOKEN:
 MINI_APP_URL = os.environ.get("MINI_APP_URL")
 if not MINI_APP_URL:
     raise RuntimeError("MINI_APP_URL environment variable is not set!")
+
+# Ensure base URL has no trailing slash
+BASE_WEBAPP_URL = MINI_APP_URL.rstrip('/')
 
 logging.basicConfig(level=logging.INFO)
 
@@ -71,8 +73,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for token in tokens:
         try:
             clean_name = validate_router_name(token)
-            # add a changing "v" param so Telegram never reuses a cached page
-            url = f"{MINI_APP_URL}/?" + urlencode({"name": clean_name, "v": int(time.time() * 1000)})
+            # Clean and clean query parameter mapping for Telegram WebApp compatibility
+            query_string = urlencode({"name": clean_name})
+            url = f"{BASE_WEBAPP_URL}/?{query_string}"
+            
             buttons.append([InlineKeyboardButton(
                 f"🔓 {token}", web_app=WebAppInfo(url=url)
             )])
