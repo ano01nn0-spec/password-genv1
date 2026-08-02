@@ -79,7 +79,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             clean_name = validate_router_name(token)
             # Clean and clean query parameter mapping for Telegram WebApp compatibility
             query_string = urlencode({"name": clean_name})
-            url = f"{BASE_WEBAPP_URL}/?{query_string}"
+            url = f"{BASE_WEBAPP_URL}?{query_string}"  # Fixed: removed trailing slash before '?'
             
             buttons.append([InlineKeyboardButton(
                 f"🔓 {token}", web_app=WebAppInfo(url=url)
