@@ -22,16 +22,18 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
 
 # Both are read from environment variables set in Railway's "Variables" tab.
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
+# الجديد (مع إضافة strip لتنظيف الرموز المخفية):
+BOT_TOKEN = (os.environ.get("BOT_TOKEN") or "").strip()
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN environment variable is not set!")
 
-MINI_APP_URL = os.environ.get("MINI_APP_URL")
+MINI_APP_URL = (os.environ.get("MINI_APP_URL") or "").strip()
 if not MINI_APP_URL:
     raise RuntimeError("MINI_APP_URL environment variable is not set!")
 
 # Ensure base URL has no trailing slash
 BASE_WEBAPP_URL = MINI_APP_URL.rstrip('/')
+
 
 logging.basicConfig(level=logging.INFO)
 
