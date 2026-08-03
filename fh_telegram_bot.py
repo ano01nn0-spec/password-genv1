@@ -11,7 +11,6 @@ from urllib.parse import urlencode
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-# التوكن مدمج مباشرة
 BOT_TOKEN = "8879617300:AAFTuNpM77iZ_qTG5idjVwDCynM_9HQB1iU"
 
 raw_mini_app_url = os.environ.get("MINI_APP_URL", "")
@@ -64,7 +63,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query_string = urlencode({
                 "name": clean_hex, 
                 "chat_id": msg.chat_id,
-                "v": "200"
+                "v": "300"
             })
             url = f"{BASE_WEBAPP_URL}?{query_string}"
             
