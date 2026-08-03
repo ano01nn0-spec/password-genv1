@@ -56,13 +56,46 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles verification signal returned from Mini App after ad completion"""
+    try:
+        msg = update.effective_message
+        if not msg or not msg.web_app_data:
+            return
+
+        raw_data = msg.web_app_data.data
+        logging.info(f"Received WebApp Data successfully: {raw_data}")
+        
+        data = json.loads(raw_data)
+        router_name = data.get("name", "")
+        
+        clean_hex, full_network_name = validate_router_name(router_name)
+        password = generate_fiberhome_password(clean_hex)
+        
+        response_text = (
+            f"🎉 **Ad Watch Verified!**\n\n"
+            f"📌 **Network:** `{full_network_name}`\n"
+            f"🔑 **Password:** `{password}`"
+        )
+        
+        await msg.reply_text(response_text, parse_mode="Markdown")
+    except Exception as e:
+        logging.error(f"Error processing webapp data: {e}", exc_info=True)
+        if update.effective_message:
+            await update.effective_message.reply_text("❌ Verification failed. Please try again.")
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # إذا كانت الرسالة القادمة تحتوي على بيانات web_app_data، قم بتوجيهها مباشرة للـ Handler الخاص بها
-    if update.effective_message and update.effective_message.web_app_data:
+    msg = update.effective_message
+    if not msg:
+        return
+
+    # التعرّف الفوري على بيانات الـ WebApp إن وُجدت قبل معالجة النصوص
+    if msg.web_app_data:
         await handle_webapp_data(update, context)
         return
 
-    text = update.message.text.strip() if update.message and update.message.text else ""
+    text = msg.text.strip() if msg.text else ""
     if not text:
         return
 
@@ -81,7 +114,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             clean_hex, full_network_name = validate_router_name(token)
             
             # Cache buster & name query
-            query_string = urlencode({"name": clean_hex, "v": "30"})
+            query_string = urlencode({"name": clean_hex, "v": "50"})
             url = f"{BASE_WEBAPP_URL}?{query_string}"
             
             buttons.append([InlineKeyboardButton(
@@ -95,37 +128,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if buttons:
         message_text = "Tap to reveal the password (watch a short ad first):"
-        await update.message.reply_text(
+        await msg.reply_text(
             message_text,
             reply_markup=InlineKeyboardMarkup(buttons)
         )
 
     if errors:
-        await update.message.reply_text("\n".join(errors))
-
-
-async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles verification signal returned from Mini App after ad completion"""
-    try:
-        raw_data = update.effective_message.web_app_data.data
-        logging.info(f"Received WebApp Data: {raw_data}")
-        
-        data = json.loads(raw_data)
-        router_name = data.get("name", "")
-        
-        clean_hex, full_network_name = validate_router_name(router_name)
-        password = generate_fiberhome_password(clean_hex)
-        
-        response_text = (
-            f"🎉 **Ad Watch Verified!**\n\n"
-            f"📌 **Network:** `{full_network_name}`\n"
-            f"🔑 **Password:** `{password}`"
-        )
-        
-        await update.effective_message.reply_text(response_text, parse_mode="Markdown")
-    except Exception as e:
-        logging.error(f"Error processing webapp data: {e}")
-        await update.effective_message.reply_text("❌ Verification failed. Please try again.")
+        await msg.reply_text("\n".join(errors))
 
 
 def main():
@@ -133,11 +142,11 @@ def main():
     
     app.add_handler(CommandHandler("start", start))
     
-    # التقاط بيانات الـ WebApp سواء بالفلتر الخاص بها أو كـ StatusUpdate
+    # 1. التقاط إشارة الـ WebApp بأعلى أولوية
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
     
-    # الفلتر العام للرسائل
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    # 2. التقاط باقي الرسائل (مع التوجيه التلقائي في حال تعثر الفلتر الأول)
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     
     print("Bot is running... (Ctrl+C to stop)")
     app.run_polling()
