@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 """
-FiberHome Router Password Bot - Telegram (with Mini App + ad-gated reveal)
+FiberHome Router Password Bot - Telegram (Ad Verification + Direct Bot Reveal)
 ----------------------------------------------------------------------------
-User sends a router name (e.g., fh_48a4ce or Fh_1ff1c1). The bot validates
-the format, displays the recognized network name, and provides a button
-to open the Mini App to unlock the password.
 """
 
 import os
 import re
+import json
 import logging
 from urllib.parse import urlencode
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
 
-# Clean environment variables thoroughly to prevent HTTPX InvalidURL error (\n or spaces)
 raw_bot_token = os.environ.get("BOT_TOKEN", "")
 BOT_TOKEN = "".join(raw_bot_token.split())
 
@@ -27,32 +24,34 @@ MINI_APP_URL = raw_mini_app_url.strip()
 if not MINI_APP_URL:
     raise RuntimeError("MINI_APP_URL environment variable is not set!")
 
-# Ensure base URL has no trailing slash
 BASE_WEBAPP_URL = MINI_APP_URL.rstrip('/')
-
 logging.basicConfig(level=logging.INFO)
 
 
 def validate_router_name(router_name: str) -> tuple[str, str]:
-    """
-    Validates router name and returns a tuple: (cleaned_hex, full_network_name)
-    Example input: "fh_1ff1c1" -> ("1ff1c1", "Fh_1ff1c1")
-    """
     raw = router_name.strip()
     clean = re.sub(r'^(fh[_\-]?|Fh[_\-]?)', '', raw, flags=re.IGNORECASE).strip().lower()
 
     if not clean or len(clean) != 6 or not all(c in '0123456789abcdef' for c in clean):
-        raise ValueError("Invalid format. Router name must contain exactly 6 hex characters.")
+        raise ValueError("Invalid format. Router name must contain 6 hex characters.")
 
-    formatted_network_name = f"Fh_{clean}"
-    return clean, formatted_network_name
+    return clean, f"Fh_{clean}"
+
+
+def generate_fiberhome_password(clean_hex: str) -> str:
+    """FiberHome Password Generation Algorithm"""
+    char_map = {
+        '0': 'f', '1': 'e', '2': 'd', '3': 'c',
+        '4': 'b', '5': 'a', '6': '9', '7': '8'
+    }
+    converted = "".join(char_map.get(c, c) for c in clean_hex)
+    return f"wlan{converted}"
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 **Welcome to FiberHome Password Generator!**\n\n"
-        "Send me your router name (e.g., `fh_1ff1c1` or `1ff1c1`) and I will help you retrieve its default Wi-Fi password.\n\n"
-        " You can also send multiple names separated by newlines.",
+        "Send me your router name (e.g., `fh_123574` or `123574`) to get started.",
         parse_mode="Markdown"
     )
 
@@ -73,8 +72,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             clean_hex, full_network_name = validate_router_name(token)
             
-            # Cache buster & parameter passing for Mini App
-            query_string = urlencode({"name": clean_hex, "v": "15"})
+            # Cache buster & name query
+            query_string = urlencode({"name": clean_hex, "v": "20"})
             url = f"{BASE_WEBAPP_URL}?{query_string}"
             
             buttons.append([InlineKeyboardButton(
@@ -84,13 +83,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             validated_names.append(f"`{full_network_name}`")
             
         except ValueError:
-            errors.append(f"❌ `{token}` -> Invalid router name format.")
+            errors.append(f"❌ `{token}` -> Invalid router format.")
 
     if buttons:
         networks_str = ", ".join(validated_names)
         message_text = (
             f"✅ **Network Identified:** {networks_str}\n\n"
-            "Tap the button below to watch a short ad and reveal your Wi-Fi password:"
+            "Tap the button below to watch the ad for 10 seconds. Your password will be sent here automatically upon completion:"
         )
         await update.message.reply_text(
             message_text,
@@ -102,10 +101,33 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("\n".join(errors), parse_mode="Markdown")
 
 
+async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles verification signal returned from Mini App after timer finishes"""
+    try:
+        data = json.loads(update.effective_message.web_app_data.data)
+        router_name = data.get("name", "")
+        
+        clean_hex, full_network_name = validate_router_name(router_name)
+        password = generate_fiberhome_password(clean_hex)
+        
+        response_text = (
+            f"🎉 **Ad Watch Verified!**\n\n"
+            f"📌 **Network:** `{full_network_name}`\n"
+            f"🔑 **Password:** `{password}`"
+        )
+        
+        await update.message.reply_text(response_text, parse_mode="Markdown")
+    except Exception as e:
+        logging.error(f"Error processing webapp data: {e}")
+        await update.message.reply_text("❌ Verification failed. Please try again.")
+
+
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
     print("Bot is running... (Ctrl+C to stop)")
     app.run_polling()
 
